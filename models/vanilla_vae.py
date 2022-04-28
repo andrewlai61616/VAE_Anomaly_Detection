@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.nn import Linear, ReLU, Sigmoid
+from torch.nn import Linear, ReLU, Sigmoid, Sequential
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, z_dim):
@@ -11,18 +11,18 @@ class Encoder(nn.Module):
             z_dim: A integer indicating the latent dimension.
         '''
         super().__init__()
-        self.linear = Linear(input_dim, hidden_dim)
-        self.mu =     Linear(hidden_dim, z_dim)
-        self.var =    Linear(hidden_dim, z_dim)
+        self.fc =  Sequential(Linear(input_dim, hidden_dim), ReLU())
+        self.mu =  Linear(hidden_dim, z_dim)
+        self.var = Linear(hidden_dim, z_dim)
 
     def forward(self, x):               # x shape [batch_size, input_dim]
-        hidden = ReLU(self.linear(x))   # hidden shape [batch_size, hidden_dim]
+        hidden = self.fc(x)             # hidden shape [batch_size, hidden_dim]
         z_mu = self.mu(hidden)          # z_mu   shape [batch_size, latent_dim]
         z_var = self.var(hidden)        # z_var  shape [batch_size, latent_dim]
         return z_mu, z_var
 
 class Decoder(nn.Module):
-    def __init__(self, z_dim, hidden_dim, output_dim):
+    def __init__(self, z_dim, hidden_dim, output_dim, output_bounded=True):
         '''
         Args:
             z_dim: A integer indicating the latent size.
@@ -30,12 +30,15 @@ class Decoder(nn.Module):
             output_dim: A integer indicating the output dimension (in case of MNIST 28 * 28)
         '''
         super().__init__()
-        self.linear = nn.Linear(z_dim, hidden_dim)
-        self.out = nn.Linear(hidden_dim, output_dim)
+        self.linear = Sequential(Linear(z_dim, hidden_dim), ReLU())
+        if output_bounded:
+            self.out = Sequential(Linear(hidden_dim, output_dim), Sigmoid())
+        else:
+            self.out = Linear(hidden_dim, output_dim)
 
-    def forward(self, x):                     # x shape [batch_size, latent_dim]
-        hidden = ReLU(self.linear(x))         # hidden shape [batch_size, hidden_dim]
-        predicted = Sigmoid(self.out(hidden)) # predicted shape [batch_size, output_dim]
+    def forward(self, x):            # x shape [batch_size, latent_dim]
+        hidden = self.linear(x)      # hidden shape [batch_size, hidden_dim]
+        predicted = self.out(hidden) # predicted shape [batch_size, output_dim]
         return predicted
     
 class VAE(nn.Module):
